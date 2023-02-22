@@ -15,6 +15,13 @@ class GameState():
 
         self.white_move = True
         self.move_log = []
+        self.checkmate = False
+        self.stalemate = False
+
+        #keeps track of locations of the kings(to check checkmates and castles)
+        self.black_king_loc = (0, 4)
+        self.white_king_loc = (7, 4)
+
     
     def check_for_right_move(self, row, col):
         if self.check_for_empty(row, col) == True:
@@ -35,6 +42,19 @@ class GameState():
         self.board[move.end_row][move.end_col] = move.piece_moved
         self.move_log.append(move)
         self.white_move = not self.white_move
+        #keeps track of kings location
+        if move.piece_moved == "white_king":
+            self.white_king_loc = (move.end_row, move.end_col)
+        elif move.piece_moved == "black_king":
+            self.black_king_loc = (move.end_row, move.end_col)
+
+        if move.prom_pawn:
+            if self.white_move:
+                self.board[move.end_row][move.end_col] = "black_queen"
+            else:
+                self.board[move.end_row][move.end_col] = "white_queen"
+
+        
 
     def undo_move(self):
         if len(self.move_log) != 0:
@@ -42,9 +62,55 @@ class GameState():
             self.board[move.start_row][move.start_col] = move.piece_moved
             self.board[move.end_row][move.end_col] = move.piece_capt
             self.white_move = not self.white_move
-    def get_valid_moves(self):
-        return self.get_pos_moves()
+            #keeps track of kings location
+            if move.piece_moved == "white_king":
+                self.white_king_loc = (move.start_row, move.start_col)
+            elif move.piece_moved == "black_king":
+                self.black_king_loc = (move.start_row, move.start_col)
 
+    def get_valid_moves(self):
+        moves = self.get_pos_moves()
+        for i in range(len(moves)-1, -1, -1):
+            self.make_move(moves[i])
+            self.white_move = not self.white_move
+            if self.is_check():
+                moves.remove(moves[i])
+            self.white_move = not self.white_move
+            self.undo_move()
+        if len(moves) == 0:
+            if self.is_check():
+                self.checkmate = True
+                print("CHECKMATE")
+            else:
+                self.stalemate = True
+                print("STALEMATE")
+
+        else:
+            self.stalemate = False
+            self.checkmate = False
+
+           
+        return moves
+
+
+
+    def is_check(self):
+        if self.white_move:
+            return self.square_under_attack(self.white_king_loc[0], self.white_king_loc[1])
+        else:
+            return self.square_under_attack(self.black_king_loc[0], self.black_king_loc[1])
+
+    def square_under_attack(self, row, col):
+        self.white_move = not self.white_move
+        #check opposite player moves
+        att_moves = self.get_pos_moves()
+        self.white_move = not self.white_move
+        for move in att_moves:
+            if move.end_row == row and move.end_col == col:
+                return True
+        return False
+
+    #all possible moves
     def get_pos_moves(self):
         moves = []
         for r in range(len(self.board)):
@@ -58,7 +124,7 @@ class GameState():
                     elif "bishop" in piece:
                         self.get_bishop_moves(r, c, moves)
                     elif "knight" in piece:
-                        self.get_pawn_moves(r, c, moves)
+                        self.get_knight_moves(r, c, moves)
                     elif "queen" in piece:
                         self.get_queen_moves(r, c, moves)
                     elif "king" in piece:
@@ -66,7 +132,8 @@ class GameState():
 
         return moves
 
-    
+    #functions for piece moves:
+
     def get_pawn_moves(self, row, col, moves):
         color = "white" if self.white_move else "black"
 
@@ -98,62 +165,74 @@ class GameState():
     def get_rook_moves(self, row, col, moves):
        directions = ((-1, 0),(0, -1),( 1, 0),(0, 1))
        color = "white" if self.white_move else "black"
+       #in all 
        for d in directions:
-        for i in range(1, 8):
-            r = row + d[0] * i
-            c = col + d[1] * i
-            if 8 > r >= 0 and 8 > c >= 0:
-                square = self.board[r][c] 
-                if square == "empty":
-                     moves.append(Move((row, col), (r, c), self.board))
-                elif not color in square:
-                    moves.append(Move((row, col), (r, c), self.board))
+            #all squares on the board(hor, vert)
+            for i in range(1, 8):
+                r = row + d[0] * i
+                c = col + d[1] * i
+                #check if out of the board
+                if 8 > r >= 0 and 8 > c >= 0:
+                    square = self.board[r][c] 
+                    if square == "empty":
+                        moves.append(Move((row, col), (r, c), self.board))
+                    #capture
+                    elif not color in square:
+                        moves.append(Move((row, col), (r, c), self.board))
+                        break
+                    else:
+                        break
+                else: 
                     break
-                else:
-                    break
-            else: 
-                break
 
     def get_bishop_moves(self, row, col, moves):
        directions = ((-1, -1),(1, -1),( -1, 1),(1, 1))
        color = "white" if self.white_move else "black"
        for d in directions:
-        for i in range(1, 8):
-            r = row + d[0] * i
-            c = col + d[1] * i
-            if 8 > r >= 0 and 8 > c >= 0:
-                square = self.board[r][c] 
-                if square == "empty":
-                     moves.append(Move((row, col), (r, c), self.board))
-                elif not color in square:
-                    moves.append(Move((row, col), (r, c), self.board))
+            for i in range(1, 8):
+                r = row + d[0] * i
+                c = col + d[1] * i
+                if 8 > r >= 0 and 8 > c >= 0:
+                    square = self.board[r][c] 
+                    if square == "empty":
+                        moves.append(Move((row, col), (r, c), self.board))
+                    elif not color in square:
+                        moves.append(Move((row, col), (r, c), self.board))
+                        break
+                    else:
+                        break
+                else: 
                     break
-                else:
-                    break
-            else: 
-                break
     
     def get_queen_moves(self, row, col, moves):
        self.get_bishop_moves(row, col, moves)
        self.get_rook_moves(row, col, moves)
        
     def get_king_moves(self, row, col, moves):
-        directions = ((-1, -1),(1, -1),( -1, 1),(1, 1))
+        directions = ((-1, -1),(1, -1),( -1, 1),(1, 1),(-1, 0),(0, -1),( 1, 0),(0, 1))
         color = "white" if self.white_move else "black"
         for d in directions:
             r = row + d[0]
             c = col + d[1]
             if 8 > r >= 0 and 8 > c >= 0:
                 square = self.board[r][c] 
-                if square == "empty":
+                if square == "empty" or not color in square:
                     moves.append(Move((row, col), (r, c), self.board))
-                elif not color in square:
+
+
+    
+    def get_knight_moves(self, row, col, moves):
+        directions = ((-2, -1),(-2, 1),( -1, -2),(-1, 2),( 1, -2),(1, 2),(2, -1),(2, 1))
+        color = "white" if self.white_move else "black"
+        for d in directions:
+            r = row + d[0]
+            c = col + d[1]
+            if 8 > r >= 0 and 8 > c >= 0:
+                square = self.board[r][c] 
+                if square == "empty" or not color in square:
                     moves.append(Move((row, col), (r, c), self.board))
-                    break
-                else:    
-                    break
-            else: 
-                break
+
+
 
 
 
@@ -172,6 +251,9 @@ class Move():
         self.end_col = end_square[1]
         self.piece_moved = board[self.start_row][self.start_col]
         self.piece_capt = board[self.end_row][self.end_col]
+        self.prom_pawn = False
+        if (self.end_row == 0 and self.piece_moved == "white_pawn") or (self.end_row == 7 and self.piece_moved == "black_pawn"):
+            self.prom_pawn = True
 
     def __eq__(self, other):
         if isinstance(other, Move):
